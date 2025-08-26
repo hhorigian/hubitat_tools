@@ -46,6 +46,12 @@
  * There are also various other "ACK" messages sent after each command.
  * In general, we do nothing in response to these (and the device doesn't appear to require we
  * send them in response to its messages).
+ *
+ *
+ * All this code is adapted from Sean Anastasi. HHorigian made a new version with some add ons. 
+ *
+ * 25/08/2025   - Learn GlobaCache(SendIr) codes and display in Device Screen.
+ * 				- Use the MolSmart IR web database to get IR Codes ready for device to send. 
  */
 
 import groovy.transform.Field
@@ -59,6 +65,8 @@ import java.util.concurrent.ConcurrentHashMap
 // I'm not sure what's necessary to make this syntax work in standard Groovy
 // BEGIN METADATA
 metadata {
+    attribute "lastLearnedCodeGC", "STRING"
+
     
         capability "Actuator"
         capability "Switch"
@@ -762,6 +770,7 @@ def handleDoneReceiving(final Map message) {
         learnedCodes[optionalCodeName] = code
     }
 
+    try { convertLastLearnedToGC() } catch (e) { warn "auto-convert failed: ${e}" }
     sendLearn(false)
 }
 
@@ -1270,3 +1279,61 @@ def num6(){ gcSendFromState('num6IRsend') }
 def num7(){ gcSendFromState('num7IRsend') }
 def num8(){ gcSendFromState('num8IRsend') }
 def num9(){ gcSendFromState('num9IRsend') }
+
+
+/* ==== Learn decode: Base64(Tuya blocks) -> Global Caché sendir ==== */
+/** Converte o state.lastLearnedCode (Base64) para 'sendir,...' e publica em atributo lastLearnedCodeGC. */
+def convertLastLearnedToGC() {
+    try {
+        final String b64 = (state?.lastLearnedCode ?: device.currentValue('lastLearnedCode')) as String
+        if (!b64) { warn "convertLastLearnedToGC: não há lastLearnedCode"; return }
+        Integer freq = null
+        if (state?.lastLearnedFreqHz instanceof Number) freq = (state.lastLearnedFreqHz as int)
+        if (!freq) freq = (settings?.defaultLearnFreqHz as Integer) ?: 38000
+
+        def res = tuyaBase64ToGC(b64, freq as int)
+        if (res == null) { warn "convertLastLearnedToGC: falha na conversão (Base64 inválido?)"; return }
+        String sendir = res.sendir as String
+        state.lastLearnedCodeGC = sendir
+        sendEvent(name: "lastLearnedCodeGC", value: sendir)
+        info "Aprendido convertido: pairs=${res.count}, freq=${res.freqHz}Hz"
+        debug "sendir completo: ${sendir}"
+    } catch (Exception e) {
+        error "convertLastLearnedToGC falhou: ${e}"
+    }
+}
+
+/** Decodifica o formato de blocos do Tuya (Base64) e gera formato Global Caché. */
+private Map tuyaBase64ToGC(final String base64Code, final int freqHz) {
+    try {
+        byte[] data = base64Code?.replaceAll(/\s/,'')?.decodeBase64()
+        List<Integer> durationsUs = []
+        int i = 0
+        while (i < data.length) {
+            int lenBytes = (data[i] & 0xFF) + 1; i++
+            if (i + lenBytes > data.length) break
+            int j = 0
+            while (j < lenBytes && (i + 1) < data.length) {
+                int lo = data[i] & 0xFF
+                int hi = data[i+1] & 0xFF
+                int us = ((hi << 8) | lo) & 0xFFFF
+                durationsUs << us
+                i += 2; j += 2
+            }
+        }
+        if (durationsUs.isEmpty()) return null
+        if ((durationsUs.size() % 2) == 1) durationsUs.remove(durationsUs.size()-1)
+
+        List<Integer> periods = []
+        for (Integer us : durationsUs) {
+            int p = (int)Math.round(((us as double) * (freqHz as double)) / 1_000_000.0d)
+            periods << (p > 0 ? p : 1)
+        }
+        String pairsCsv = periods.join(",")
+        String sendir = "sendir,1:1,${freqHz},1,1,${pairsCsv}"
+        return [sendir: sendir, freqHz: freqHz, count: (periods.size()/2) as int]
+    } catch (Exception e) {
+        error "tuyaBase64ToGC falhou: ${e}"
+        return null
+    }
+}
