@@ -7,6 +7,16 @@
  *  Licensed under the Apache License, Version 2.0
  *
  *  V1.0 - 31/03/2026 - Initial version
+ *
+ *
+ *  Precisa colocar o IP, Usuario e Senha da sua camera que está locala na rede. Escolher o tempo que vão ser tomadas as capturas. 
+ *  A hubitat vai publicar uma imagem no http://enderecohubitat/local/xxxx_xxxx.jpg com a imagem. 
+ *  
+ *  Se for colocar dentro do Vetra. Só precisa a) Compartilhar essa camera no MakerAPi que envia devices para o Vetra. b) Importar em devices, a camera, como tipo de device "Camera".  Não preencher mais nenhuma informação.
+ *
+ *
+
+ 
  */
 
 metadata {
