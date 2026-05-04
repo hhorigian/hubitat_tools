@@ -196,27 +196,28 @@ def onPollParse(resp, data) {
 //	===== Capability Switch =====
 def on() {
 	logInfo("on: [frameTv: ${getDataValue("frameTv")}]")
-	// TRATO patch (2026-02-26): For 2024/2025 TVs, sending KEY_POWER over WS while in standby often returns ms.error.
-	// Prefer WOL first, then re-poll; only attempt POWER key after wake if WS is stable.
 	sendWol()
-	runIn(1, onPoll)
-	runInMillis(2500, "wakeRetry")
+	runIn(5, wolRetry)
+	runIn(2, onPoll)
+	runIn(8, wakeByWs)
 }
 
-def wakeRetry() {
-	// If still in standby, send WOL again (some networks/TVs need a second packet)
-	def pwr = device.currentValue("switch")
-	if (pwr != "on") {
-		sendWol()
-		runIn(2, onPoll)
+def wolRetry() {
+	sendWol()
+}
+
+def wakeByWs() {
+	if (device.currentValue("switch") != "on") {
+		logDebug("wakeByWs: still off, sending KEY_POWER via WebSocket")
+		sendKey("POWER")
+		runIn(5, onPoll)
 	}
-	// Do NOT send KEY_POWER here; it causes ms.error loops on newer firmware when the TV is asleep.
 }
 
 def sendWol() {
 	def wolMac = getDataValue("alternateWolMac")
 	if (!wolMac) {
-		logWarn("sendWol: alternateWolMac not set - cannot WOL")
+		logWarn("sendWol: alternateWolMac not set - run Configure first")
 		return
 	}
 	def cmd = "FFFFFFFFFFFF$wolMac$wolMac$wolMac$wolMac$wolMac$wolMac$wolMac$wolMac$wolMac$wolMac$wolMac$wolMac$wolMac$wolMac$wolMac$wolMac"
@@ -226,8 +227,8 @@ def sendWol() {
 		[type: hubitat.device.HubAction.Type.LAN_TYPE_UDPCLIENT,
 		 destinationAddress: "255.255.255.255:9",
 		 encoding: hubitat.device.HubAction.Encoding.HEX_STRING])
-	sendHubCommand(wol)
-	logDebug("sendWol: packet sent to 255.255.255.255:9")
+	5.times { sendHubCommand(wol) }
+	logDebug("sendWol: 5 packets sent to 255.255.255.255:9")
 }
 
 def setPowerOnMode() {
