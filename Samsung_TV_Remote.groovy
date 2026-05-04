@@ -683,11 +683,7 @@ def webSocketStatus(message) { // library marker davegut.samsungTvWebsocket, lin
 	Map logData = [metnod: "webSocketStatus"] // library marker davegut.samsungTvWebsocket, line 274
 	if (message == "status: open") { // library marker davegut.samsungTvWebsocket, line 275
 		status = "open" // library marker davegut.samsungTvWebsocket, line 276
-		if (state.wsData != "") { // library marker davegut.samsungTvWebsocket, line 277
-			execMessage(state.wsData) // library marker davegut.samsungTvWebsocket, line 278
-			state.wsData = "" // library marker davegut.samsungTvWebsocket, line 279
-			logData << [action: "execMessage"] // library marker davegut.samsungTvWebsocket, line 280
-		} // library marker davegut.samsungTvWebsocket, line 281
+		// Command is sent after ms.channel.connect, not here, so TV channel is ready
 	} else if (message == "status: closing") { // library marker davegut.samsungTvWebsocket, line 282
 		status = "closed" // library marker davegut.samsungTvWebsocket, line 283
 		state.currentFunction = "close" // library marker davegut.samsungTvWebsocket, line 284
@@ -716,6 +712,11 @@ def parse(resp) { // library marker davegut.samsungTvWebsocket, line 295
 				} else { // library marker davegut.samsungTvWebsocket, line 307
 					logData << [TOKEN: "noChange"] // library marker davegut.samsungTvWebsocket, line 308
 				} // library marker davegut.samsungTvWebsocket, line 309
+				if (state.wsData != "") { // send pending command once channel is confirmed ready
+					execMessage(state.wsData)
+					state.wsData = ""
+					logData << [action: "execMessage"]
+				}
 				break // library marker davegut.samsungTvWebsocket, line 310
 			case "d2d_service_message": // library marker davegut.samsungTvWebsocket, line 311
 				def data = parseJson(resp.data) // library marker davegut.samsungTvWebsocket, line 312
