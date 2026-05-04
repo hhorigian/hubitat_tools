@@ -208,11 +208,17 @@ def wolRetry() {
 	sendWol()
 }
 
-def wakeByWs() {
+def wakeByWs(data=[:]) {
 	if (device.currentValue("switch") != "on") {
-		logDebug("wakeByWs: still off, sending KEY_POWER via WebSocket")
+		def retryCount = (data?.retryCount ?: 0) as int
+		logDebug("wakeByWs: still off, sending KEY_POWER via WebSocket (attempt ${retryCount+1}/5)")
 		sendKey("POWER")
 		runIn(5, onPoll)
+		if (retryCount < 4) {
+			runIn(10, wakeByWs, [data: [retryCount: retryCount + 1]])
+		} else {
+			logWarn("wakeByWs: TV still off after 5 KEY_POWER attempts via WebSocket")
+		}
 	}
 }
 
